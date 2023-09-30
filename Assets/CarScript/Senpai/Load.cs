@@ -15,6 +15,7 @@
 // 2020/04/13 [東樹 潤弥] 荷重計算編集中
 // 2020/04/15 [東樹 潤弥] 荷重前後左右ともに割合計算
 // 2020/07/01 [東樹 潤弥] radRollの計算を車体から、タイヤの角度に変更
+// 2023/06/01　河合奏　荷重分配計算を重心位置依存の計算に変更
 //────────────────────────────────────────────
 
 using System.Collections;
@@ -188,18 +189,18 @@ namespace AIM
             }
         }
         //============================================================================================================
-        // 荷重の移動を計算し、修正値を返す
+        // 荷重分配の割合を計算（河合奏追記/2023/6/10）
+        //重心位置が不安定で総重量が狂うため割合に変換
         public void MoveLoad()
         {
+            //全体の総加重量
             float totalLoad = load_FL + load_FR + load_RL + load_RR;
 
+            //四軸の荷重割合
             forceCoef_FL = (load_FL / totalLoad);
             forceCoef_FR = (load_FR / totalLoad);
             forceCoef_RL = (load_RL / totalLoad);
             forceCoef_RR = (load_RR / totalLoad);
-
-            forceCoef_F = forceCoef_FL + forceCoef_FR;
-            forceCoef_R = forceCoef_RL + forceCoef_RR;
 
             // --------------------------------------------------
             //前後の荷重
@@ -211,22 +212,9 @@ namespace AIM
             // ---------------------------------------------------
         }
         //============================================================================================================
-        public float GetForceCoef(WheelController.FRSide frSide, WheelController.LRSide lrSide)
-        {
-            if (frSide == WheelController.FRSide.Front)
-            {
-                if (lrSide == WheelController.LRSide.Right) { return forceCoef_FR; }
-                else if (lrSide == WheelController.LRSide.Left) { return forceCoef_FL; }
-            }
-            else if (frSide == WheelController.FRSide.Rear)
-            {
-                if (lrSide == WheelController.LRSide.Right) { return forceCoef_RR; }
-                else if (lrSide == WheelController.LRSide.Left) { return forceCoef_RL; }
-            }
-            return 0.0f;
-        }
+       
         //============================================================================================================
-        // 加速度を計算する
+        // 加速度を計算する（先輩のみの個所）
         void CalcAcceleration()
         {
             // 加速度をどう計算するか
@@ -242,7 +230,7 @@ namespace AIM
             prevSpeed = speed;
         }
         //============================================================================================================
-        // 旋回半径を計算するメソッド
+        // 旋回半径を計算するメソッド（先輩のみの個所）
         // 参考URL
         // http://hamanako-kankou.com/turedure/abs/abs.html
         float CalcTurningRadius()
@@ -271,7 +259,7 @@ namespace AIM
             return wheelBase / Mathf.Sin(MinAngle * Mathf.Deg2Rad);
         }
         //============================================================================================================
-        // 最初に車のパラメータを計算する
+        // 最初に車のパラメータを計算する（先輩のみの個所）
         void CalcWheelParameters()
         {
             float preBaseL = wheelController_FL.transform.localPosition.z - wheelController_RL.transform.localPosition.z;
@@ -284,115 +272,28 @@ namespace AIM
 
             treadWidth = Mathf.Abs((preTreadL + preTreadR) / 2.0f);
         }
+       
         //============================================================================================================
+        //荷重分配（河合奏追記/2023/06/10）
         void CalcLoad()
         {
-            // 回転角度がマイナスにならないので、左だけが大きくなっている
-            radRoll = Mathf.Deg2Rad * vc.steering.Angle * rollCoeff;
-            //radRoll  = Mathf.Deg2Rad * transform.localEulerAngles.y;
-
             // 荷重計算（前後）
+            //実際の荷重分配式を使用
+            //参考：https://dskjal.com/car/math-car-weight.html
             distributionRatio_F = rigidbody.mass * (lengthRear / wheelBase) - (heightCenter / wheelBase) * (rigidbody.mass / 9.8f) * acceleration;
             distributionRatio_R = rigidbody.mass * (lengthFront / wheelBase) + (heightCenter / wheelBase) * (rigidbody.mass / 9.8f) * acceleration;
 
-            ////荷重計算（左右）
-            //if (turningRadius > 0.0f)
-            //{
-            //    distributionRatio_O = 0.5f - (heightCenter / treadWidth) * (radRoll - (1.0f / 9.8f) * ((speed * speed) / turningRadius));
-            //    distributionRatio_I = 0.5f + (heightCenter / treadWidth) * (radRoll - (1.0f / 9.8f) * ((speed * speed) / turningRadius));
-            //}
-            //else
-            //{
-            //    distributionRatio_O = 0.5f;
-            //    distributionRatio_I = 0.5f;
-            //}
-
-            //if (turningRadius != 0.0f)
-            //{
-            //    if (isRight)
-            //    {
-            //        distributionRatio_O = (rigidbody.mass * (lengthFR.magnitude + RollCenterLength.magnitude * Mathf.Tan(RollAngle * Mathf.Deg2Rad)) + CentrifugalForce * RollCenterLength.magnitude) / treadWidth;
-            //        distributionRatio_I = (rigidbody.mass * (lengthFL.magnitude - RollCenterLength.magnitude * Mathf.Tan(RollAngle * Mathf.Deg2Rad)) - CentrifugalForce * RollCenterLength.magnitude) / treadWidth;
-            //    }
-            //    else
-            //    {
-            //        distributionRatio_O = (rigidbody.mass * (lengthFL.magnitude + RollCenterLength.magnitude * Mathf.Tan(RollAngle * Mathf.Deg2Rad)) + CentrifugalForce * RollCenterLength.magnitude) / treadWidth;
-            //        distributionRatio_I = (rigidbody.mass * (lengthFR.magnitude - RollCenterLength.magnitude * Mathf.Tan(RollAngle * Mathf.Deg2Rad)) - CentrifugalForce * RollCenterLength.magnitude) / treadWidth;
-            //    }
-            //}
-            //else
-            //{
-            //    distributionRatio_O = 0.5f;
-            //    distributionRatio_I = 0.5f;
-            //}
-
-            // 松下変更---------------------------------------------------------
-            //if (isRight)
-            //{
-            //	load_FL = (distributionRatio_F * distributionRatio_O);
-            //	load_FR = (distributionRatio_F * distributionRatio_I);
-            //	load_RL = (distributionRatio_R * distributionRatio_O);
-            //	load_RR = (distributionRatio_R * distributionRatio_I);
-            //}
-            //else
-            //{
-            //	load_FL = (distributionRatio_F * distributionRatio_I);
-            //	load_FR = (distributionRatio_F * distributionRatio_O);
-            //	load_RL = (distributionRatio_R * distributionRatio_I);
-            //	load_RR = (distributionRatio_R * distributionRatio_O);
-            //}
-
-            if (/*turningRadius != 0.0f*/true)
-            {
-                if (true)
-                {
-                    load_FL = distributionRatio_F * ((-(BalancePoint.x) + 5.0f) / 10.0f);
-                    load_FR = distributionRatio_F * (((BalancePoint.x) + 5.0f) / 10.0f);
-                    load_RL = distributionRatio_R * ((-(BalancePoint.x) + 5.0f) / 10.0f);
-                    load_RR = distributionRatio_R * (((BalancePoint.x) + 5.0f) / 10.0f);
-                }
-                else
-                {
-                    load_FL = (distributionRatio_F * (lengthFR.magnitude - RollCenterLength.magnitude * Mathf.Tan(RollAngle * Mathf.Deg2Rad)) - CentrifugalForce * RollCenterLength.magnitude) / treadWidth;
-                    load_FR = (distributionRatio_F * (lengthFL.magnitude + RollCenterLength.magnitude * Mathf.Tan(RollAngle * Mathf.Deg2Rad)) + CentrifugalForce * RollCenterLength.magnitude) / treadWidth;
-                    load_RL = (distributionRatio_R * (lengthFR.magnitude - RollCenterLength.magnitude * Mathf.Tan(RollAngle * Mathf.Deg2Rad)) - CentrifugalForce * RollCenterLength.magnitude) / treadWidth;
-                    load_RR = (distributionRatio_R * (lengthFL.magnitude + RollCenterLength.magnitude * Mathf.Tan(RollAngle * Mathf.Deg2Rad)) + CentrifugalForce * RollCenterLength.magnitude) / treadWidth;
-                }
-            }
-            else
-            {
-                load_FL = distributionRatio_F / 2.0f;
-                load_FR = distributionRatio_F / 2.0f;
-                load_RL = distributionRatio_R / 2.0f;
-                load_RR = distributionRatio_R / 2.0f;
-            }
+            // 荷重計算（左右）
+            // 重心位置の計算が不安定なため自由真一の割合を使用して疑似的に計算
+            load_FL = distributionRatio_F * ((-(BalancePoint.x) + 5.0f) / 10.0f);
+            load_FR = distributionRatio_F * (((BalancePoint.x) + 5.0f) / 10.0f);
+            load_RL = distributionRatio_R * ((-(BalancePoint.x) + 5.0f) / 10.0f);
+            load_RR = distributionRatio_R * (((BalancePoint.x) + 5.0f) / 10.0f);
         }
         //=================================================================================
-        // Loadの後輪反映処理
-        public float loadRear()
-        {
-            if (forceCoef_R < rearDriftLoad)
-            {
-                return 1.0f - (rearDriftLoad - forceCoef_R);
-            }
-            return 1.0f;
-        }
-        //=================================================================================
-        // Loadの後輪反映処理
-        public float LerpForceCoef(WheelController.FRSide frSide)
-        {
-            float returnNum = 0.0f;
-            if (frSide == WheelController.FRSide.Front)
-            {
-                returnNum = Mathf.Lerp(forceCoef_F, 1.0f, lerpSpeed);
-            }
-            else if (frSide == WheelController.FRSide.Rear)
-            {
-                returnNum = Mathf.Lerp(forceCoef_R, 1.0f, lerpSpeed);
-            }
-            return Mathf.Abs(returnNum);
-        }
 
+        //=================================================================================
+        //最終荷重分配割合を受け渡しする関数（先輩引継ぎ）
         public float LerpForceCoef(WheelController.FRSide frSide, WheelController.LRSide lrSide)
         {
             float returnNum = 0.0f;
@@ -409,6 +310,7 @@ namespace AIM
             returnNum = Mathf.Clamp(returnNum, 0.0f, Mathf.Infinity);
             return Mathf.Abs(returnNum);
         }
+        //=================================================================================
 
         //----------------------------------------------------------
         //2023/06/25 河合変更＆追記

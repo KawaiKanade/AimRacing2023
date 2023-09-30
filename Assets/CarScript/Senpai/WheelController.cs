@@ -11,34 +11,51 @@ using static UnityEngine.Rendering.VolumeComponent;
 namespace AIM
 {
     /// <summary>
-    /// タイヤの操作を行うクラス
+    /// タイヤの操作を行うクラス(先輩からの引継ぎ)
+    /// 作成日：2022/不明/不明
+    /// 作成者：不明
+    /// 更新：2023/05/20～2023/09/22
+    /// タイヤが車体に対して生み出す力の計算をすべて変更
+    /// 場所：河合奏で検索後"----"に挟まれている箇所
+    /// 更新者：河合奏
     /// </summary>
     [Serializable]
     public partial class WheelController : MonoBehaviour
     {
+        //----------------------------------------------------------------------------------------------------------------------------------------------------------
+        //先輩のみの個所
+        //車体の情報を持つ親オブジェクトのクラス
         private VehicleController vc;
 
+        //ホイールに関係する情報を保持するクラス
         [SerializeField]
         public Wheel wheel;
 
+        //サスペンションのスプリングに関する情報を保持するクラス
         [SerializeField, /*HideInInspector*/]
         public Spring spring;
 
+        //サスペンションのダンパーに関する情報を保持するクラス
         [SerializeField/*, HideInInspector*/]
         public Damper damper;
 
         [SerializeField]
         public Suspension suspension;   // サスペンションの追加処理用クラスの宣言(2023/08/31_船渡)
 
+        //タイヤの縦方向の物理現象に関する情報を保持するクラス（先輩引継ぎ）
         [SerializeField, HideInInspector]
         public Friction fFriction;
 
+        //タイヤの横方向の物理現象に関する情報を保持するクラス（先輩引継ぎ）
         //[SerializeField, HideInInspector]
         public Friction sFriction;
 
+
+        //タイヤが触れている地面の情報（先輩引継ぎ）
         [SerializeField]
         private WheelHit[] wheelHits;
 
+        //タイヤが触れることのできるレイヤーマスク（先輩引継ぎ）
         [SerializeField]
         private LayerMask scanIgnoreLayers = Physics.IgnoreRaycastLayer;
 
@@ -346,15 +363,20 @@ namespace AIM
             }
             catch { }
         }
-
+        //----------------------------------------------------------------------------------------------------------------------------------------------------------
+        
+        //----------------------------------------------------------------------------------------------------------------------------------------------------------
+        //ハンドルからの情報を受け取りタイヤの回転に反映
         private void CalculateWheelDirectionsAndRotations()
         {
+            //ハンドルからステアリング角度を受け取る
             steerQuaternion = Quaternion.AngleAxis(wheel.steerAngle, transformUp);
             camberQuaternion = Quaternion.AngleAxis(-(int)vehicleLRSide * wheel.camberAngle, transformForward);
             totalRotation = steerQuaternion * camberQuaternion;
 
             //河合変更--------------------------------------------------
-            //リアホイールに反映しない
+            //デフォルトのタイヤの角度にステアリングの角度を反映
+            //リアホイールには反映しない
             if ((int)vehicleFRSide == 1)
             {
                 wheel.up = steerQuaternion * transformUp;
@@ -373,7 +395,11 @@ namespace AIM
             // Leftは-1 Rightは1
             wheel.inside = wheel.right * -(int)vehicleLRSide;
         }
+        //----------------------------------------------------------------------------------------------------------------------------------------------------------
 
+        //----------------------------------------------------------------------------------------------------------------------------------------------------------
+        //先輩のみの個所
+        //地面のヒット判定
         private void HitUpdate()
         {
             float minDistance = Mathf.Infinity;
@@ -492,7 +518,11 @@ namespace AIM
                 wheelHit.sidewaysDir = Quaternion.AngleAxis(90f, wheelHit.normal) * wheelHit.forwardDir;
             }
         }
+        //----------------------------------------------------------------------------------------------------------------------------------------------------------
 
+        //----------------------------------------------------------------------------------------------------------------------------------------------------------
+        //先輩のみの個所
+        //地面のヒット後の情報整理？
         private void CalculateAverageWheelHit()
         {
             int count = 0;
@@ -564,7 +594,10 @@ namespace AIM
 
             hasHit = true;
         }
+        //----------------------------------------------------------------------------------------------------------------------------------------------------------
 
+        //----------------------------------------------------------------------------------------------------------------------------------------------------------
+        //チームメンバーの個所
         private void SuspensionUpdate()
         {
             spring.prevOverflow = spring.overflow;  // 前回の値の保存(0817)
@@ -759,8 +792,11 @@ namespace AIM
                 suspension.SuspensionForce = 0.0f;
             }
         }
+        //----------------------------------------------------------------------------------------------------------------------------------------------------------
 
-
+        //----------------------------------------------------------------------------------------------------------------------------------------------------------
+        //先輩のみの個所
+        //タイヤの回転速度反映
         private void WheelUpdate()
         {
             wheel.prevWorldPosition = wheel.worldPosition;
@@ -827,6 +863,7 @@ namespace AIM
             }
         }
 
+        //タイヤの見た目上の回転速度の反映
         private void VisualOnlyUpdate()
         {
             spring.targetPoint = wheelHit.raycastHit.point - wheel.right * wheel.rimOffset * (int)vehicleLRSide;
@@ -874,93 +911,60 @@ namespace AIM
                 }
             }
         }
+        //----------------------------------------------------------------------------------------------------------------------------------------------------------
 
         private void FrictionUpdate()
         {
-            //前回の摩擦速度を保存
+            //前回の摩擦速度を保存（河合奏更新/2023/07/14）
             prevForwardSpeed = fFriction.speed;
 
+            //タイヤに対しての各種ノーマルベクトルをY軸の情報だけ抜いて保存（河合奏更新/2023/07/14）
             NomalForward = wheel.forward;
-            NomalForward.y = 0.0f;/*
-            NomalForward = NomalForward.normalized;*/
+            NomalForward.y = 0.0f;
             NomalRight = wheel.right;
-
-            Forward = parentRigidbody.transform.forward;
-            Right = parentRigidbody.transform.right;
 
             // 引数のワールド座標における、速度を返す
             // 返ってくる速度は、RigidBodyのVelocityと、Anguler
             // wheelHit.raycastHit.pointは、タイヤから真下に向けた時の接地位置
             contactVelocity = parentRigidbody.GetPointVelocity(wheelHit.raycastHit.point);
 
-            if (/*hasHit*/true)
-            {
-                fFriction.speed = Vector3.Dot(NomalForward, contactVelocity);
-                sFriction.speed = Vector3.Dot(NomalRight, contactVelocity);
-            }
-            else
-            {
-                fFriction.speed = sFriction.speed = 0;
-            }
+            //タイヤの現在の移動スピードを縦横で分解（河合奏更新/2023/07/14）
+            fFriction.speed = Vector3.Dot(NomalForward, contactVelocity);
+            sFriction.speed = Vector3.Dot(NomalRight, contactVelocity);
 
-            float lowerLimit = LOWER_LIMIT_MAX - Mathf.Clamp(contactVelocity.magnitude, 0.0f, LOWER_LIMIT_MAX);
-            float wheelForwardSpeed = wheel.angularVelocity * wheel.tireRadius;
-            float clampedWheelForwardSpeed = Mathf.Clamp(Mathf.Abs(wheelForwardSpeed), lowerLimit, Mathf.Infinity);
-
-            //===================
-            // 横スリップ
-            //===================
+            //----------------------------------------------------------------------------------------------------------------------------------------------------------
+            //スリップ角の計算（河合奏更新/2023/08/28）
             SlipVelocity = sFriction.slip - preSlipAngle;
             preSlipAngle = sFriction.slip;
             sFriction.slip = 0.0f;
             sFriction.force = 0.0f;
 
-            if (/*hasHit*/true)
+            //タイヤがどの方向に進んでいるのかを求める
+            if (fFriction.speed > 0.0f)
             {
-                if (vc.BSenpai)
+                sFriction.slip = (Mathf.Atan(-sFriction.speed / fFriction.speed) * Mathf.Rad2Deg);
+            }
+            else
+            {
+                sFriction.slip = (Mathf.Atan(sFriction.speed / -fFriction.speed) * Mathf.Rad2Deg);
+                if (Mathf.Sign(SlipVelocity) == Mathf.Sign(sFriction.slip))
                 {
-                    sFriction.slip = (fFriction.speed == 0.0f) ? 0.0f : (Mathf.Atan(sFriction.speed / /*clampedWheelForwardSpeed*/ fFriction.speed) * Mathf.Rad2Deg) / F_SLIP_COEFF;
-                    sFriction.force = Mathf.Sign(sFriction.slip) * activeFrictionPreset.Curve.Evaluate(Mathf.Abs(sFriction.slip)) * wheel.tireLoad * sFriction.forceCoefficient * F_FORCE_COEFF_CONST;
+                    sFriction.slip += Mathf.Sign(sFriction.slip) * 180.0f;
                 }
-                else if (fFriction.slip != 0.0f || sFriction.slip != 0.0f)
+                else
                 {
-                    if (fFriction.speed > 0.0f)
-                    {
-                        sFriction.slip = (Mathf.Atan(-sFriction.speed / fFriction.speed) * Mathf.Rad2Deg);
-                    }
-                    else
-                    {
-                        sFriction.slip = (Mathf.Atan(sFriction.speed / -fFriction.speed) * Mathf.Rad2Deg);
-                        if (Mathf.Sign(SlipVelocity) == Mathf.Sign(sFriction.slip))
-                        {
-                            sFriction.slip += Mathf.Sign(sFriction.slip) * 180.0f;
-                        }
-                        else
-                        {
-                            sFriction.slip += -Mathf.Sign(sFriction.slip) * 180.0f;
-                        }
-                    }
+                    sFriction.slip += -Mathf.Sign(sFriction.slip) * 180.0f;
                 }
             }
+            //----------------------------------------------------------------------------------------------------------------------------------------------------------
 
-            //===================
-            // 縦スリップ
-            //===================
+            //----------------------------------------------------------------------------------------------------------------------------------------------------------
+            //タイヤの回転速度計算（先輩のみ記入）
             wheel.freeRollingAngularVelocity = fFriction.speed / wheel.tireRadius;
 
             inertia = wheel.mass * wheel.tireRadius * wheel.tireRadius;
             motorForce = wheel.motorTorque / wheel.tireRadius;
             brakeForce = Mathf.Abs(wheel.brakeTorque / wheel.tireRadius);
-
-            fFriction.slip = 0.0f;
-            if (hasHit || true)
-            {
-                float fClampedForwardSpeed = Mathf.Clamp(Mathf.Abs(fFriction.speed), F_CLAMPED_FORWARD_SPEED_MIN, Mathf.Infinity);
-                fFriction.slip = fClampedForwardSpeed == 0.0f ? 0.0f : (((wheel.angularVelocity * wheel.tireRadius) - fFriction.speed) / fClampedForwardSpeed) * fFriction.slipCoefficient;
-            }
-
-            fFriction.slip *= vc.loadCom.LerpForceCoef(vehicleFRSide, vehicleLRSide);
-            //sFriction.slip *= vc.loadCom.LerpForceCoef(vehicleFRSide, vehicleLRSide);
 
             float clampedSlip = Mathf.Clamp(Mathf.Abs(fFriction.slip), CLAMPED_SLIP_MIN, Mathf.Infinity);
 
@@ -990,10 +994,7 @@ namespace AIM
             else
                 wheel.residualAngularVelocity = Mathf.Clamp(wheel.residualAngularVelocity, -Mathf.Infinity, 0.0f);
 
-            if (/*!hasHit && prevHasHit*/true)
-            {
-                wheel.residualAngularVelocity = prevFreeRollingAngularVelocity;
-            }
+            wheel.residualAngularVelocity = prevFreeRollingAngularVelocity;
 
             // タイヤの角速度（回転速度）を設定
             wheel.angularVelocity = wheel.freeRollingAngularVelocity + wheel.residualAngularVelocity;
@@ -1008,41 +1009,16 @@ namespace AIM
 
             wheel.residualAngularVelocity = Mathf.Sign(wheel.residualAngularVelocity) * Mathf.Clamp(Mathf.Abs(wheel.residualAngularVelocity), 0.0f, 200.0f);
 
-            if (/*hasHit*/true && brakeForce != 0.0f && Mathf.Abs(motorForce) < brakeForce && brakeForce < maxPutDownForce)
+            if (brakeForce != 0.0f && Mathf.Abs(motorForce) < brakeForce && brakeForce < maxPutDownForce)
                 wheel.angularVelocity = wheel.freeRollingAngularVelocity;
 
             if (trackedVehicle)
                 wheel.angularVelocity = wheel.freeRollingAngularVelocity;
 
-            if (hasHit || true)
-            {
-                float smoothSpeed = fFriction.speed;
-                if (contactVelocity.magnitude < 1.0f)
-                {
-                    smoothSpeed = Mathf.SmoothStep(prevForwardSpeed, fFriction.speed, Time.fixedDeltaTime * SMOOTH_SPEED_TIME_COEFF);
-                }
-                fFriction.force = Mathf.Clamp(motorForce - Mathf.Sign(fFriction.speed) * Mathf.Clamp01(Mathf.Abs(smoothSpeed)) * brakeForce,
-                  -maxPutDownForce, maxPutDownForce) * fFriction.forceCoefficient;
-            }
-            else
-            {
-                fFriction.force = 0f;
-            }
-
             // 角速度をRPMに変換
             // タイヤのRPMの完成
-            // マジックナンバー0,53f
+            // マジックナンバー0,53f（北村追記）
             wheel.rpm = wheel.angularVelocity * VELOCITY_TO_RPM * 0.53f;
-
-            // 摩擦力の制限
-            if (fFriction.maxForce > 0)
-            {
-                fFriction.force = Mathf.Clamp(fFriction.force, -fFriction.maxForce, fFriction.maxForce);
-            }
-            if (sFriction.maxForce > 0)
-            {
-                sFriction.force = Mathf.Clamp(sFriction.force, -sFriction.maxForce, sFriction.maxForce);
-            }
 
             if (hasHit || true)
             {
@@ -1050,25 +1026,16 @@ namespace AIM
                 wheelHit.sidewaysSlip = sFriction.slip;
             }
             prevFreeRollingAngularVelocity = wheel.freeRollingAngularVelocity;
+            //---------------------------------------------------------------------------------------------------------------------------------------------------------
         }
 
         private void UpdateForces()
         {
             // 地面にいるときの処理
-            if (hasHit /*|| true*/)
+            if (hasHit)
             {
                 wheelHitPoint = wheelHit.point;
                 raycastHitNormal = wheelHit.raycastHit.normal;
-
-                hitDir.x = wheel.worldPosition.x - wheelHitPoint.x;
-                hitDir.y = wheel.worldPosition.y - wheelHitPoint.y;
-                hitDir.z = wheel.worldPosition.z - wheelHitPoint.z;
-
-                // ベクトルの大きさを求める（√ x^2 + y^2 + z^2）
-                float distance = Mathf.Sqrt(hitDir.x * hitDir.x + hitDir.y * hitDir.y + hitDir.z * hitDir.z);
-                alternateForwardNormal.x = hitDir.x / distance;
-                alternateForwardNormal.y = hitDir.y / distance;
-                alternateForwardNormal.z = hitDir.z / distance;
 
                 if (Vector3.Dot(raycastHitNormal, transformUp) > 0.1f)
                 {
@@ -1076,70 +1043,13 @@ namespace AIM
                     // サスペンション追加計算処理を追記(0831_船渡）
                     float suspensionForceMagnitude = Mathf.Clamp(spring.force + damper.force - suspension.SuspensionForce, 0.0f, Mathf.Infinity); ;
 
-                    float obstracleForceMagnitude = 0f;
+                    //タイヤが地面から車両を押す力はここで計算
+                    totalForce = suspensionForceMagnitude * Vector3.up;
 
-                    // 速度の絶対値
-                    float absSpeed = fFriction.speed;
-                    if (absSpeed < 0) absSpeed = -absSpeed;
-
-                    // 速度が遅いとき
-                    if (absSpeed < 8f)
-                    {
-                        projectedNormal = Vector3.ProjectOnPlane(wheelHit.normal, wheel.right);
-                        float distace = Mathf.Sqrt(projectedNormal.x * projectedNormal.x + projectedNormal.y * projectedNormal.y + projectedNormal.z * projectedNormal.z);
-                        projectedNormal.x /= distace;
-                        projectedNormal.y /= distace;
-                        projectedNormal.z /= distace;
-
-                        projectedAltNormal = Vector3.ProjectOnPlane(alternateForwardNormal, wheel.right);
-                        distace = Mathf.Sqrt(projectedAltNormal.x * projectedAltNormal.x + projectedAltNormal.y * projectedAltNormal.y + projectedAltNormal.z * projectedAltNormal.z);
-                        projectedAltNormal.x /= distace;
-                        projectedAltNormal.y /= distace;
-                        projectedAltNormal.z /= distace;
-
-                        float dot = Vector3.Dot(projectedNormal, projectedAltNormal);
-
-                        if (dot < 0.0f) dot = -dot;
-
-                        obstracleForceMagnitude = (1.0f - dot) * suspensionForceMagnitude * -Mathf.Sign(wheelHit.angleForward);
-                    }
-
-                    //======================
-                    // 東樹追加
-                    // 荷重移動処理　
-                    /*fFriction.force *= vc.loadCom.LerpForceCoef(vehicleFRSide, vehicleLRSide);*/
-
-                    // 滑りすぎるため、要修正
-                    //sFriction.force *= vc.loadCom.GetForceCoef(vehicleFRSide, vehicleLRSide);
-                    //sFriction.force *= vc.loadCom.LerpForceCoef(vehicleFRSide, vehicleLRSide);
-
-                    // 後輪を滑らせる
-                    //if (vehicleFRSide == FRSide.Rear)
-                    //{
-                    //    //vc.axles[1].geometry.steerCoefficient = vc.drift.dBraking.ReverseSteer(vc.axles[1].geometry.steerCoefficient);
-                    //    vc.axles[1].geometry.steerCoefficient.Round(STEER_ROUND);
-                    //}
-                    //======================
-
-                    //タイヤが車両を押す力はここで計算
-                    totalForce = suspensionForceMagnitude * Vector3.up  /*+ (load * -wheel.up * 2.0f)*/;
-
-                    if (vc.BSenpai)
-                    {
-                        totalForce.x += wheelHit.sidewaysDir.x * -sFriction.force
-                                + wheelHit.forwardDir.x * fFriction.force;
-
-                        totalForce.y += wheelHit.sidewaysDir.y * -sFriction.force
-                                + wheelHit.forwardDir.y * fFriction.force;
-
-                        totalForce.z += wheelHit.sidewaysDir.z * -sFriction.force
-                                + wheelHit.forwardDir.z * fFriction.force;
-                    }
-                    else
-                    {
-                        /*vc.RigitSpeed = (int)(Mathf.InverseLerp(0.0f, 20.0f, fFriction.speed) * 20.0f);*/
-                        totalForce += WheelToBodyAddForce + CorneringForce + RollingResistance - BrakeForce;
-                    }
+                    //タイヤが生み出す力が車体を押す力の統合
+                    totalForce += WheelToBodyAddForce + CorneringForce + RollingResistance - BrakeForce;
+ 
+                    //車輪がついているRigitBodyの座標計算
                     forcePoint.x = (wheelHitPoint.x * HITPOINT_COEFF + spring.targetPoint.x) / FORCEPOINT_COEFF;
                     forcePoint.y = (wheelHitPoint.y * HITPOINT_COEFF + spring.targetPoint.y) / FORCEPOINT_COEFF;
                     forcePoint.z = (wheelHitPoint.z * HITPOINT_COEFF + spring.targetPoint.z) / FORCEPOINT_COEFF;
@@ -1171,14 +1081,6 @@ namespace AIM
 
                     spring.BeforeForce = totalForce;
                     //===========================================================================
-
-                    //if (applyForceToOthers)
-                    //{
-                    //    if (wheelHit.raycastHit.rigidbody)
-                    //    {
-                    //        wheelHit.raycastHit.rigidbody.AddForceAtPosition(-totalForce, forcePoint);
-                    //    }
-                    //}
                 }
             }
         }
